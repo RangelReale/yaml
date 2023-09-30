@@ -318,14 +318,17 @@ type decoder struct {
 	stringMapType  reflect.Type
 	generalMapType reflect.Type
 
-	knownFields bool
-	uniqueKeys  bool
-	decodeCount int
-	aliasCount  int
-	aliasDepth  int
+	knownFields     bool
+	uniqueKeys      bool
+	decodeCount     int
+	aliasCount      int
+	aliasDepth      int
+	customTagParser CustomTagParser
 
 	mergedFields map[interface{}]bool
 }
+
+type CustomTagParser func(tag string, value interface{}) interface{}
 
 var (
 	nodeType       = reflect.TypeOf(Node{})
@@ -503,6 +506,14 @@ func (d *decoder) unmarshal(n *Node, out reflect.Value) (good bool) {
 	if unmarshaled {
 		return good
 	}
+	var outTag reflect.Value
+	if n.Style&TaggedStyle == TaggedStyle && !resolvableTag(n.Tag) && d.customTagParser != nil {
+		outTag = out
+		var e interface{}
+		// out = reflect.New(reflect.TypeOf(e))
+		out = reflect.ValueOf(e)
+	}
+
 	switch n.Kind {
 	case ScalarNode:
 		good = d.scalar(n, out)
@@ -518,6 +529,12 @@ func (d *decoder) unmarshal(n *Node, out reflect.Value) (good bool) {
 	default:
 		failf("cannot decode node with unknown kind %d", n.Kind)
 	}
+
+	if n.Style&TaggedStyle == TaggedStyle && !resolvableTag(n.Tag) && d.customTagParser != nil {
+		v := d.customTagParser(n.Tag, out.Interface())
+		outTag.Set(reflect.ValueOf(v))
+	}
+
 	return good
 }
 
@@ -576,6 +593,8 @@ func (d *decoder) scalar(n *Node, out reflect.Value) bool {
 				failf("!!binary value contains invalid base64 data")
 			}
 			resolved = string(data)
+			// } else if !resolvableTag(n.Tag) && d.customTagParser != nil {
+			// 	resolved = d.customTagParser(n.Tag, resolved)
 		}
 	}
 	if resolved == nil {

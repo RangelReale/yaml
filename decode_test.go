@@ -107,8 +107,8 @@ var unmarshalTests = []struct {
 		"fixed: 685_230.15",
 		map[string]float64{"fixed": 685230.15},
 	},
-	//{"sexa: 190:20:30.15", map[string]interface{}{"sexa": 0}}, // Unsupported
-	//{"notanum: .NaN", map[string]interface{}{"notanum": math.NaN()}}, // Equality of NaN fails.
+	// {"sexa: 190:20:30.15", map[string]interface{}{"sexa": 0}}, // Unsupported
+	// {"notanum: .NaN", map[string]interface{}{"notanum": math.NaN()}}, // Equality of NaN fails.
 
 	// Bools are per 1.2 spec.
 	{
@@ -183,7 +183,7 @@ var unmarshalTests = []struct {
 		map[string]int{"decimal": 685230},
 	},
 
-	//{"sexa: 190:20:30", map[string]interface{}{"sexa": 0}}, // Unsupported
+	// {"sexa: 190:20:30", map[string]interface{}{"sexa": 0}}, // Unsupported
 
 	// Nulls from spec
 	{
@@ -947,7 +947,7 @@ var unmarshalErrorTests = []struct {
 	{"%TAG !%79! tag:yaml.org,2002:\n---\nv: !%79!int '1'", "yaml: did not find expected whitespace"},
 	{"a:\n  1:\nb\n  2:", ".*could not find expected ':'"},
 	{"a: 1\nb: 2\nc 2\nd: 3\n", "^yaml: line 3: could not find expected ':'$"},
-	{"#\n-\n{", "yaml: line 3: could not find expected ':'"}, // Issue #665
+	{"#\n-\n{", "yaml: line 3: could not find expected ':'"},   // Issue #665
 	{"0: [:!00 \xef", "yaml: incomplete UTF-8 octet sequence"}, // Issue #666
 	{
 		"a: &a [00,00,00,00,00,00,00,00,00]\n" +
@@ -1482,7 +1482,7 @@ func (s *S) TestMergeNestedStruct(c *C) {
 	// 2) A simple implementation might attempt to handle the key skipping
 	//    directly by iterating over the merging map without recursion, but
 	//    there are more complex cases that require recursion.
-	// 
+	//
 	// Quick summary of the fields:
 	//
 	// - A must come from outer and not overriden
@@ -1498,7 +1498,7 @@ func (s *S) TestMergeNestedStruct(c *C) {
 		A, B, C int
 	}
 	type Outer struct {
-		D, E      int
+		D, E   int
 		Inner  Inner
 		Inline map[string]int `yaml:",inline"`
 	}
@@ -1516,10 +1516,10 @@ func (s *S) TestMergeNestedStruct(c *C) {
 	// Repeat test with a map.
 
 	var testm map[string]interface{}
-	var wantm = map[string]interface {} {
-		"f":     60,
+	var wantm = map[string]interface{}{
+		"f": 60,
 		"inner": map[string]interface{}{
-		    "a": 10,
+			"a": 10,
 		},
 		"d": 40,
 		"e": 50,
@@ -1741,16 +1741,61 @@ func (s *S) TestFuzzCrashers(c *C) {
 	}
 }
 
-//var data []byte
-//func init() {
+var decoderCustomTagsTests = []struct {
+	data   string
+	values []interface{}
+}{{
+	"a: !mytag abc",
+	[]interface{}{
+		map[string]interface{}{"a": customTag{"abc"}},
+	},
+}, {
+	`- !mytag
+  x: 1
+  y: "b"`,
+	[]interface{}{
+		map[string]interface{}{"a": customTag{"abc"}},
+	},
+}}
+
+type customTag struct {
+	Value string
+}
+
+func (s *S) TestDecoderCustomTags(c *C) {
+	for i, item := range decoderCustomTagsTests {
+		c.Logf("test %d: %q", i, item.data)
+		var values []interface{}
+		dec := yaml.NewDecoder(strings.NewReader(item.data))
+		dec.CustomTagParser(func(tag string, value interface{}) interface{} {
+			if tag == "!mytag" {
+				return customTag{value.(string)}
+			}
+			return value
+		})
+		for {
+			var value interface{}
+			err := dec.Decode(&value)
+			if err == io.EOF {
+				break
+			}
+			c.Assert(err, IsNil)
+			values = append(values, value)
+		}
+		c.Assert(values, DeepEquals, item.values)
+	}
+}
+
+// var data []byte
+// func init() {
 //	var err error
 //	data, err = ioutil.ReadFile("/tmp/file.yaml")
 //	if err != nil {
 //		panic(err)
 //	}
-//}
+// }
 //
-//func (s *S) BenchmarkUnmarshal(c *C) {
+// func (s *S) BenchmarkUnmarshal(c *C) {
 //	var err error
 //	for i := 0; i < c.N; i++ {
 //		var v map[string]interface{}
@@ -1759,13 +1804,13 @@ func (s *S) TestFuzzCrashers(c *C) {
 //	if err != nil {
 //		panic(err)
 //	}
-//}
+// }
 //
-//func (s *S) BenchmarkMarshal(c *C) {
+// func (s *S) BenchmarkMarshal(c *C) {
 //	var v map[string]interface{}
 //	yaml.Unmarshal(data, &v)
 //	c.ResetTimer()
 //	for i := 0; i < c.N; i++ {
 //		yaml.Marshal(&v)
 //	}
-//}
+// }
